@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import threading
 
@@ -10,11 +10,12 @@ count = 0
 lock = threading.Lock()
 total_visits = 0
 reset_count = 0
+maximum = 2**63 - 1
 
 async def atomic_inc_reset():
     global reset_count
     with lock:
-        reset_count +=1
+        reset_count +=1        
 
 async def atomic_inc_total():
     global total_visits
@@ -30,6 +31,10 @@ async def atomic_inc_count():
 async def counter_visit():
     atomic_inc_count()
     atomic_inc_total()
+    if count > maximum:
+        raise ValueError("count overflow")
+    if total_visits > maximum:
+        raise ValueError("total visits overflow")
     return {"count": count, "message": "string"}
 
 @app.get("/counter/current")
@@ -39,6 +44,8 @@ async def counter_current():
 @app.get("/counter/reset")
 async def counter_reset():
     atomic_inc_reset()
+    if reset_count > maximum:
+        raise ValueError("reset overflow")
     count = 0
     return {"count": count, "message": "reset"}
 
@@ -48,7 +55,10 @@ async def counter_stats():
 
 @app.post("/counter/set/{value}")
 async def counter_set(value: int):
+    if value > maximum:
+        raise ValueError("value is too big")
     count = value
+    
     return {"count": count, "message": "updated"}
 
 @app.get("/health")
@@ -58,3 +68,5 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
